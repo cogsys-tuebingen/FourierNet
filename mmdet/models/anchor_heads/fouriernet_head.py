@@ -2,17 +2,13 @@ import torch
 import torch.nn as nn
 from mmcv.cnn import normal_init
 
-from mmdet.core import distance2bbox, force_fp32, multi_apply, multiclass_nms, multiclass_nms_with_mask
+from mmdet.core import distance2bbox, force_fp32, multi_apply, multiclass_nms_with_mask
 from mmdet.ops import ModulatedDeformConvPack
 
 from ..builder import build_loss
 from ..registry import HEADS
 from ..utils import ConvModule, Scale, bias_init_with_prob, build_norm_layer
-from IPython import embed
-import cv2
-import numpy as np
 import math
-import time
 
 INF = 1e8
 
