@@ -5,6 +5,7 @@ import mmcv
 import numpy as np
 import pycocotools.mask as maskUtils
 import torch
+from os.path import join
 from mmcv.parallel import collate, scatter
 from mmcv.runner import load_checkpoint
 
@@ -195,10 +196,33 @@ def show_result_pyplot(img,
         class_names (list[str] or tuple[str]): A list of class names.
         score_thr (float): The threshold to visualize the bboxes and masks.
         fig_size (tuple): Figure size of the pyplot figure.
-        out_file (str, optional): If specified, the visualization result will
-            be written to the out file instead of shown in a window.
     """
     img = show_result(
         img, result, class_names, score_thr=score_thr, show=False)
     plt.figure(figsize=fig_size)
     plt.imshow(mmcv.bgr2rgb(img))
+
+
+def save_result_pyplot(img,
+                       result,
+                       class_names,
+                       images_path,
+                       results_path,
+                       score_thr=0.3,
+                       fig_size=(15, 10)):
+    """Visualize the detection results on the image.
+
+    Args:
+        img (str or np.ndarray): Image filename or loaded image.
+        result (tuple[list] or list): The detection result, can be either
+            (bbox, segm) or just bbox.
+        class_names (list[str] or tuple[str]): A list of class names.
+        results_path: The path to the directory where the images should be saved
+        images_path: The path to the directory of the images
+        score_thr (float): The threshold to visualize the bboxes and masks.
+        fig_size (tuple): Figure size of the pyplot figure.
+    """
+    img_result = show_result(
+        join(images_path, img), result, class_names, score_thr=score_thr, show=False)
+    plt.figure(figsize=fig_size)
+    plt.imsave(join(results_path, img), mmcv.bgr2rgb(img_result))

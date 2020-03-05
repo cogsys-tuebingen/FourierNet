@@ -1,7 +1,7 @@
 # model settings
 contour_points = 60
 model = dict(
-    type='PolarMask',
+    type='FourierNet',
     pretrained='open-mmlab://resnet50_caffe',
     backbone=dict(
         type='ResNet',
@@ -21,7 +21,7 @@ model = dict(
         num_outs=5,
         relu_before_extra_convs=True),
     bbox_head=dict(
-        type='PolarMask_Head',
+        type='FourierNetHead',
         num_classes=81,
         in_channels=256,
         stacked_convs=4,
@@ -37,7 +37,7 @@ model = dict(
         loss_centerness=dict(
             type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
         loss_on_coe=False,
-        loss_mask=dict(type='MaskIOULoss'),
+        loss_mask=dict(type='PolarIOULoss'),
         norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
         contour_points=contour_points,
         use_fourier=True,
@@ -63,53 +63,57 @@ test_cfg = dict(
     nms=dict(type='nms', iou_thr=0.5),
     max_per_img=100)
 # dataset settings
-dataset_type = 'Coco_Seg_Dataset'
+dataset_type = 'CocoDataset'
 data_root = '/home/benbarka/cuda2/data/datasets/coco/'
 img_norm_cfg = dict(
     mean=[102.9801, 115.9465, 122.7717], std=[1.0, 1.0, 1.0], to_rgb=False)
+train_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations', with_bbox=True),
+    dict(
+        type='Resize',
+        img_scale=[(1333, 640), (1333, 800)],
+        multiscale_mode='value',
+        keep_ratio=True),
+    dict(type='RandomFlip', flip_ratio=0.5),
+    dict(type='Normalize', **img_norm_cfg),
+    dict(type='Pad', size_divisor=32),
+    dict(type='DefaultFormatBundle'),
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
+]
+test_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(
+        type='MultiScaleFlipAug',
+        img_scale=(1333, 800),
+        flip=False,
+        transforms=[
+            dict(type='Resize', keep_ratio=True),
+            dict(type='RandomFlip'),
+            dict(type='Normalize', **img_norm_cfg),
+            dict(type='Pad', size_divisor=32),
+            dict(type='ImageToTensor', keys=['img']),
+            dict(type='Collect', keys=['img']),
+        ])
+]
 data = dict(
     imgs_per_gpu=4,
-    workers_per_gpu=8,
+    workers_per_gpu=4,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_train2017.json',
-        img_prefix=data_root + 'images/',
-        img_scale=(1280, 768),
-        img_norm_cfg=img_norm_cfg,
-        contour_points=contour_points,
-        # size_divisor=0,
-        flip_ratio=0.5,
-        with_mask=True,
-        with_crowd=False,
-        with_label=True,
-        resize_keep_ratio=False),
+        img_prefix=data_root + 'train2017/',
+        pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'images/',
-        img_scale=(1280, 768),
-        img_norm_cfg=img_norm_cfg,
-        contour_points=contour_points,
-        # size_divisor=0,
-        flip_ratio=0,
-        with_mask=False,
-        with_crowd=False,
-        with_label=True,
-        resize_keep_ratio=False),
+        img_prefix=data_root + 'val2017/',
+        pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_val2017.json',
         img_prefix=data_root + 'images/',
-        img_scale=(1280, 768),
-        img_norm_cfg=img_norm_cfg,
-        contour_points=contour_points,
-        size_divisor=32,
-        flip_ratio=0,
-        with_mask=False,
-        with_crowd=False,
-        with_label=False,
-        resize_keep_ratio=False,
-        test_mode=True))
+        pipeline=test_pipeline))
 # optimizer
 lr_ratio = 1
 
