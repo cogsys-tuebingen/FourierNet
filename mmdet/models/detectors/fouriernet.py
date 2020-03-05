@@ -1,14 +1,6 @@
-from ..registry import DETECTORS
 from .single_stage import SingleStageDetector
-import torch.nn as nn
-
-from mmdet.core import bbox2result, bbox_mask2result
-from .. import builder
+from mmdet.core import bbox_mask2result
 from ..registry import DETECTORS
-from .base import BaseDetector
-from IPython import embed
-import time
-import torch
 
 
 @DETECTORS.register_module
@@ -22,7 +14,7 @@ class FourierNet(SingleStageDetector):
                  test_cfg=None,
                  pretrained=None):
         super(FourierNet, self).__init__(backbone, neck, bbox_head, train_cfg,
-                                   test_cfg, pretrained)
+                                         test_cfg, pretrained)
 
     def forward_train(self,
                       img,
@@ -45,19 +37,17 @@ class FourierNet(SingleStageDetector):
         else:
             extra_data = None
 
-
         x = self.extract_feat(img)
         outs = self.bbox_head(x)
         loss_inputs = outs + (gt_bboxes, gt_labels, img_metas, self.train_cfg)
 
         losses = self.bbox_head.loss(
             *loss_inputs,
-            gt_masks = gt_masks,
+            gt_masks=gt_masks,
             gt_bboxes_ignore=gt_bboxes_ignore,
             extra_data=extra_data
         )
         return losses
-
 
     def simple_test(self, img, img_meta, rescale=False):
         x = self.extract_feat(img)
@@ -74,4 +64,3 @@ class FourierNet(SingleStageDetector):
         mask_results = results[0][1]
 
         return bbox_results, mask_results
-

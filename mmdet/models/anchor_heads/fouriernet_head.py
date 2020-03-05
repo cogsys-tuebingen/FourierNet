@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from mmcv.cnn import normal_init
+from torch import Tensor
 
 from mmdet.core import distance2bbox, force_fp32, multi_apply, multiclass_nms_with_mask
 from mmdet.ops import ModulatedDeformConvPack
@@ -37,14 +38,14 @@ class FourierNetHead(nn.Module):
                  contour_points=360,
                  use_fourier=False,
                  num_coe=36,
-                 visulize_coe=36):
+                 visulize_coe=36,
+                 centerness_factor=0.5):
         super(FourierNetHead, self).__init__()
         self.use_fourier = use_fourier
         self.contour_points = contour_points
         self.num_coe = num_coe
         self.visulize_coe = visulize_coe
         self.interval = 360 // self.contour_points
-
         self.num_classes = num_classes
         self.cls_out_channels = num_classes - 1
         self.in_channels = in_channels
@@ -60,18 +61,13 @@ class FourierNetHead(nn.Module):
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.fp16_enabled = False
-        # xez add for polarmask
         self.use_dcn = use_dcn
         self.mask_nms = mask_nms
         self.bbox_from_mask = bbox_from_mask
-
-        # debug vis img
         self.vis_num = 1000
         self.count = 0
-
-        # test
         self.angles = torch.range(0, 359, self.interval).cuda() / 180 * math.pi
-
+        self.centerness_factor = centerness_factor
         self._init_layers()
 
     def _init_layers(self):
@@ -194,12 +190,10 @@ class FourierNetHead(nn.Module):
         cls_feat = x
         reg_feat = x
         mask_feat = x
-        batch, filters, feat_x, feat_y = mask_feat.shape
 
         for cls_layer in self.cls_convs:
             cls_feat = cls_layer(cls_feat)
         cls_score = self.polar_cls(cls_feat)
-
 
         for mask_layer in self.mask_convs:
             mask_feat = mask_layer(mask_feat)
@@ -500,7 +494,7 @@ class FourierNetHead(nn.Module):
             else:
                 mask_pred = mask_pred.permute(1, 2, 0).reshape(-1, self.contour_points)
             nms_pre = cfg.get('nms_pre', -1)
-            if nms_pre > 0 and scores.shape[0] > nms_pre:
+            if 0 < nms_pre < scores.shape[0]:
                 max_scores, _ = (scores * centerness[:, None]).max(dim=1)
                 _, topk_inds = max_scores.topk(nms_pre)
                 points = points[topk_inds, :]
@@ -510,7 +504,7 @@ class FourierNetHead(nn.Module):
                 centerness = centerness[topk_inds]
             if not self.bbox_from_mask:
                 bboxes = distance2bbox(points, bbox_pred, max_shape=img_shape)
-                #masks, _ = self.distance2mask(points, mask_pred, bbox=bboxes)
+                # masks, _ = self.distance2mask(points, mask_pred, bbox=bboxes)
                 masks, _ = self.distance2mask(points, mask_pred, max_shape=img_shape)
             else:
                 masks, _ = self.distance2mask(points, mask_pred, max_shape=img_shape)
@@ -539,7 +533,6 @@ class FourierNetHead(nn.Module):
         mlvl_scores = torch.cat([padding, mlvl_scores], dim=1)
         mlvl_centerness = torch.cat(mlvl_centerness)
 
-        centerness_factor = 0.5  # mask centerness is smaller than origin centerness, so add a constant is important or the score will be too low.
         if self.mask_nms:
             '''1 mask->min_bbox->nms, performance same to origin box'''
             a = _mlvl_masks
@@ -551,7 +544,7 @@ class FourierNetHead(nn.Module):
                 cfg.score_thr,
                 cfg.nms,
                 cfg.max_per_img,
-                score_factors=mlvl_centerness + centerness_factor)
+                score_factors=mlvl_centerness + self.centerness_factor)
 
         else:
             '''2 origin bbox->nms, performance same to mask->min_bbox'''
@@ -562,7 +555,7 @@ class FourierNetHead(nn.Module):
                 cfg.score_thr,
                 cfg.nms,
                 cfg.max_per_img,
-                score_factors=mlvl_centerness + centerness_factor)
+                score_factors=mlvl_centerness + self.centerness_factor)
 
         return det_bboxes, det_labels, det_masks
 
