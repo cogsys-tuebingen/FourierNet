@@ -233,17 +233,19 @@ def bbox_mask2result(bboxes, masks, labels, num_classes, img_meta):
         num_classes (int): class number, including background class
 
     Returns:
-        list(ndarray): bbox results of each class
+        bbox_results(list): bbox results of each class
+        mask_results(list): mask results of each class
     """
     ori_shape = img_meta['ori_shape']
     img_h, img_w, _ = ori_shape
 
+    # return zeros if there are no detections
     if bboxes.shape[0] == 0:
         bbox_results = [
             np.zeros((0, 5), dtype=np.float32) for i in range(num_classes - 1)
         ]
         mask_results = [
-            np.zeros((0, 36), dtype=np.float32) for i in range(num_classes - 1) #TODO: change to num of points
+            np.zeros((0, 36), dtype=np.float32) for i in range(num_classes - 1)
         ]
         return bbox_results, mask_results
 
@@ -251,6 +253,7 @@ def bbox_mask2result(bboxes, masks, labels, num_classes, img_meta):
     masks = masks.permute(0, 2, 1)
     masks = masks.reshape([masks.shape[0], -1])
 
+    # transform the contour points into rle and make the mask list
     for i in range(masks.shape[0]):
         m = masks[i].tolist()
         rle = mask_util.frPyObjects([m], img_h, img_w)
