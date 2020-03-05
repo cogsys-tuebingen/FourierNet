@@ -1,7 +1,7 @@
 import mmcv
 import numpy as np
 import torch
-
+import pycocotools.mask as mask_util
 
 def bbox2delta(proposals, gt, means=[0, 0, 0, 0], stds=[1, 1, 1, 1]):
     assert proposals.size() == gt.size()
@@ -221,3 +221,43 @@ def distance2bbox(points, distance, max_shape=None):
         x2 = x2.clamp(min=0, max=max_shape[1] - 1)
         y2 = y2.clamp(min=0, max=max_shape[0] - 1)
     return torch.stack([x1, y1, x2, y2], -1)
+
+
+def bbox_mask2result(bboxes, masks, labels, num_classes, img_meta):
+    """Convert detection results to a list of numpy arrays.
+
+    Args:
+        bboxes (Tensor): shape (n, 5)
+        masks (Tensor): shape (n, 2, P)
+        labels (Tensor): shape (n, )
+        num_classes (int): class number, including background class
+
+    Returns:
+        list(ndarray): bbox results of each class
+    """
+    ori_shape = img_meta['ori_shape']
+    img_h, img_w, _ = ori_shape
+
+    if bboxes.shape[0] == 0:
+        bbox_results = [
+            np.zeros((0, 5), dtype=np.float32) for i in range(num_classes - 1)
+        ]
+        mask_results = [
+            np.zeros((0, 36), dtype=np.float32) for i in range(num_classes - 1) #TODO: change to num of points
+        ]
+        return bbox_results, mask_results
+
+    mask_results = [[] for _ in range(num_classes - 1)]
+    masks = masks.permute(0, 2, 1)
+    masks = masks.reshape([masks.shape[0], -1])
+
+    for i in range(masks.shape[0]):
+        m = masks[i].tolist()
+        rle = mask_util.frPyObjects([m], img_h, img_w)
+        label = labels[i]
+        mask_results[label].append(rle[0])
+
+    bboxes = bboxes.cpu().numpy()
+    labels = labels.cpu().numpy()
+    bbox_results = [bboxes[labels == i, :] for i in range(num_classes - 1)]
+    return bbox_results, mask_results
