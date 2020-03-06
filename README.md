@@ -31,8 +31,6 @@ git clone https://github.com/Nuri-benbarka/mmdetection.git
 
 cd mmdetection
 pip install -r requirements.txt
-pip install mmcv==0.2.14
-pip install numpy==1.17 
 pip install -v -e .
 ```
 
