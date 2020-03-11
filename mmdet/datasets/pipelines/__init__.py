@@ -7,11 +7,12 @@ from .test_aug import MultiScaleFlipAug
 from .transforms import (Albu, Expand, MinIoURandomCrop, Normalize, Pad,
                          PhotoMetricDistortion, RandomCrop, RandomFlip, Resize,
                          SegRescale)
+from .polar import PolarTarget
 
 __all__ = [
     'Compose', 'to_tensor', 'ToTensor', 'ImageToTensor', 'ToDataContainer',
     'Transpose', 'Collect', 'LoadAnnotations', 'LoadImageFromFile',
     'LoadProposals', 'MultiScaleFlipAug', 'Resize', 'RandomFlip', 'Pad',
     'RandomCrop', 'Normalize', 'SegRescale', 'MinIoURandomCrop', 'Expand',
-    'PhotoMetricDistortion', 'Albu', 'InstaBoost'
+    'PhotoMetricDistortion', 'Albu', 'InstaBoost', 'PolarTarget'
 ]

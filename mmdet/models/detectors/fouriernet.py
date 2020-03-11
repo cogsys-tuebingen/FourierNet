@@ -23,19 +23,10 @@ class FourierNet(SingleStageDetector):
                       gt_labels,
                       gt_masks=None,
                       gt_bboxes_ignore=None,
-                      _gt_labels=None,
-                      _gt_bboxes=None,
-                      _gt_masks=None,
-                      _gt_centerness=None
+                      gt_poly=None,
+                      gt_center=None,
+                      gt_max_centerness=None
                       ):
-
-        if _gt_labels is not None:
-            extra_data = dict(_gt_labels=_gt_labels,
-                              _gt_bboxes=_gt_bboxes,
-                              _gt_masks=_gt_masks,
-                              _gt_centerness=_gt_centerness)
-        else:
-            extra_data = None
 
         x = self.extract_feat(img)
         outs = self.bbox_head(x)
