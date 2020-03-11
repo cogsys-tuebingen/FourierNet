@@ -384,8 +384,24 @@ class FourierNetHead(nn.Module):
 
     def polar_target(self, points, labels_list, bbox_targets_list, mask_targets_list, centerness_targets_list):
         assert len(points) == len(self.regress_ranges)
-
         num_levels = len(points)
+        # expand regress ranges to align with points
+        expanded_regress_ranges = [
+            points[i].new_tensor(self.regress_ranges[i])[None].expand_as(
+                points[i]) for i in range(num_levels)
+        ]
+        # concat all levels points and regress ranges
+        concat_regress_ranges = torch.cat(expanded_regress_ranges, dim=0)
+        concat_points = torch.cat(points, dim=0)
+        # get labels and bbox_targets of each image
+        labels_list, bbox_targets_list = multi_apply(
+            self.fcos_target_single,
+            labels_list,
+            bbox_targets_list,
+            mask_targets_list,
+            centerness_targets_list,
+            points=concat_points,
+            regress_ranges=concat_regress_ranges)
 
         # split to per img, per level
         num_points = [center.size(0) for center in points]
@@ -426,6 +442,86 @@ class FourierNetHead(nn.Module):
         # only calculate pos centerness targets, otherwise there may be nan
         centerness_targets = (pos_mask_targets.min(dim=-1)[0] / pos_mask_targets.max(dim=-1)[0])
         return torch.sqrt(centerness_targets)
+
+    def polar_target_single(self, gt_bboxes, gt_masks, gt_labels, gt_centers, gt_max_centerness, points,
+                            regress_ranges):
+        num_points = points.size(0)  # Sum of all points ever
+        num_gts = gt_labels.size(0)  # Number of ground truth objects
+        if num_gts == 0:
+            return gt_labels.new_zeros(num_points), \
+                   gt_bboxes.new_zeros((num_points, 4))
+
+        areas = (gt_bboxes[:, 2] - gt_bboxes[:, 0] + 1) * (
+                gt_bboxes[:, 3] - gt_bboxes[:, 1] + 1)  # Area of all bounding boxes
+        # TODO: figure out why these two are different
+        # areas = areas[None].expand(num_points, num_gts)
+        areas = areas[None].repeat(num_points, 1)  # Make a copy for all points
+        regress_ranges = regress_ranges[:, None, :].expand(
+            num_points, num_gts,
+            2)  # Make a copy for each object (adds a dimension equal to num of ground truth bboxes)
+        gt_bboxes = gt_bboxes[None].expand(num_points, num_gts, 4)  # Make a copy for all points
+        # xs ys 分别是points的x y坐标
+        xs, ys = points[:, 0], points[:, 1]
+        xs = xs[:, None].expand(num_points, num_gts)  # Make a copy for each object
+        ys = ys[:, None].expand(num_points, num_gts)  # Make a copy for each object
+        # The pixel distance between all object bounding boxes and all points in feature map
+        left = xs - gt_bboxes[..., 0]
+        right = gt_bboxes[..., 2] - xs
+        top = ys - gt_bboxes[..., 1]
+        bottom = gt_bboxes[..., 3] - ys
+        bbox_targets = torch.stack((left, top, right, bottom),
+                                   -1)  # feature map上所有点对于gtbox的上下左右距离 [num_pix, num_gt, 4]
+
+        mask_centers = torch.Tensor(gt_centers).float()
+        # 把mask_centers assign到不同的层上,根据regress_range和重心的位置
+        mask_centers = mask_centers[None].expand(num_points, num_gts, 2)  # make centerness regression targets
+        if self.center_sample:
+            if self.use_mask_center:
+                inside_gt_bbox_mask = self.get_mask_sample_region(gt_bboxes,
+                                                                  mask_centers,
+                                                                  self.strides,
+                                                                  self.num_points_per_level,
+                                                                  xs,
+                                                                  ys,
+                                                                  radius=self.radius)
+            else:
+                inside_gt_bbox_mask = self.get_sample_region(gt_bboxes,
+                                                             self.strides,
+                                                             self.num_points_per_level,
+                                                             xs,
+                                                             ys,
+                                                             radius=self.radius)
+        else:
+            inside_gt_bbox_mask = bbox_targets.min(-1)[0] > 0
+
+        # condition2: limit the regression range for each location
+        max_regress_distance = bbox_targets.max(-1)[0]  # returns the maximum vector in the bounbing box targets
+
+        inside_regress_range = (
+                                       max_regress_distance >= regress_ranges[..., 0]) & (
+                                       max_regress_distance <= regress_ranges[
+                                   ..., 1])  # check if it is in regress range
+
+        areas[inside_gt_bbox_mask == 0] = INF
+        areas[inside_regress_range == 0] = INF
+        min_area, min_area_inds = areas.min(dim=1)
+
+        labels = gt_labels[min_area_inds]  # set the ground truth labels
+        labels[min_area == INF] = 0  # [num_gt] 介于0-80
+        bbox_targets = bbox_targets[range(num_points), min_area_inds]
+        pos_inds = labels.nonzero().reshape(-1)  # get the indexes of features which have objects
+
+        mask_targets = torch.zeros(num_points, self.contour_points).float()
+        centerness_target = torch.zeros(num_points).float()
+        pos_mask_ids = min_area_inds[pos_inds]
+        for p, id in zip(pos_inds, pos_mask_ids):
+            x, y = points[p]
+            pos_mask_contour = gt_masks[id]
+            dists, _ = self.get_36_coordinates(x, y, pos_mask_contour, self.contour_points)
+            mask_targets[p] = dists
+            centerness_target[p] = self.polar_centerness_target(dists, gt_max_centerness[id])
+            #centerness_target[p] = self.polar_centerness_target(dists)
+        return labels, bbox_targets, mask_targets, centerness_target
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds', 'centernesses'))
     def get_bboxes(self,
