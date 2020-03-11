@@ -226,14 +226,17 @@ class FourierNetHead(nn.Module):
              gt_labels,
              img_metas,
              cfg,
-             gt_masks,
-             gt_bboxes_ignore=None):
+             gt_masks=None,
+             gt_bboxes_ignore=None,
+             gt_centers=None,
+             gt_max_centerness=None):
         assert len(cls_scores) == len(bbox_preds) == len(centernesses) == len(mask_preds)
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         all_level_points = self.get_points(featmap_sizes, bbox_preds[0].dtype,
                                            bbox_preds[0].device)
 
-        labels, bbox_targets, mask_targets, centerness_targets = self.polar_target(all_level_points, extra_data)
+        labels, bbox_targets, mask_targets, centerness_targets = self.polar_target(all_level_points, gt_labels,
+                                                                                   gt_bboxes, gt_masks, gt_centers)
 
         num_imgs = cls_scores[0].size(0)
         # flatten cls_scores, bbox_preds and centerness
@@ -379,12 +382,10 @@ class FourierNetHead(nn.Module):
             (x.reshape(-1), y.reshape(-1)), dim=-1) + stride // 2
         return points
 
-    def polar_target(self, points, extra_data):
+    def polar_target(self, points, labels_list, bbox_targets_list, mask_targets_list, centerness_targets_list):
         assert len(points) == len(self.regress_ranges)
 
         num_levels = len(points)
-
-        labels_list, bbox_targets_list, mask_targets_list, centerness_targets_list = extra_data.values()
 
         # split to per img, per level
         num_points = [center.size(0) for center in points]

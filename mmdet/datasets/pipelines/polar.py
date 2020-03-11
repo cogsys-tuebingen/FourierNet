@@ -116,7 +116,7 @@ class PolarTarget(object):
             max_centernesses.append(max_centerness)
 
         results['gt_centers'] = mask_centers
-        results['gt_poly'] = mask_contours
+        results['gt_masks'] = mask_contours
         results['gt_max_centerness'] = max_centernesses
 
         return results

@@ -23,8 +23,7 @@ class FourierNet(SingleStageDetector):
                       gt_labels,
                       gt_masks=None,
                       gt_bboxes_ignore=None,
-                      gt_poly=None,
-                      gt_center=None,
+                      gt_centers=None,
                       gt_max_centerness=None
                       ):
 
@@ -36,7 +35,8 @@ class FourierNet(SingleStageDetector):
             *loss_inputs,
             gt_masks=gt_masks,
             gt_bboxes_ignore=gt_bboxes_ignore,
-            extra_data=extra_data
+            gt_centers=gt_centers,
+            gt_max_centerness=gt_max_centerness
         )
         return losses
 

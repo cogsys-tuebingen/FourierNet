@@ -78,12 +78,12 @@ train_pipeline = [
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
-    dict(type='PolarTarget', contour_points=contour_points,use_max_only=True,return_max_centerness=True),
+    dict(type='PolarTarget', contour_points=contour_points, use_max_only=True, return_max_centerness=True),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', '_gt_labels',
-                               '_gt_bboxes',
-                               '_gt_masks',
-                               '_gt_centerness']),
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels',
+                               'gt_masks',
+                               'gt_centers',
+                               'gt_max_centerness']),
 ]
 test_pipeline = [
     dict(type='LoadImageFromFile'),
