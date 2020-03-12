@@ -58,7 +58,6 @@ def get_polar_coordinates(c_x, c_y, pos_mask_contour, n=72):
 
 
 def polar_centerness_target(pos_mask_targets, max_centerness=None):
-    # only calculate pos centerness targets, otherwise there may be nan
     centerness_targets = np.sqrt(pos_mask_targets.min() / pos_mask_targets.max())
     if max_centerness:
         centerness_targets /= max_centerness
@@ -89,14 +88,23 @@ def get_centerpoint(lis):
 
 
 @PIPELINES.register_module
-class PolarTarget(object):
+class ConvertToContour(object):
+    """Converts the mask from a binary grid representation into boundary contour points,
+        and also returns the contour center and the centerness of the center if required.
+
+        Args:
+            use_max_only (bool): if true, only the largest contour will be returned for instances with multiple contours
+            return_centerness (bool): if true, the centerness of the contour center point is returned
+            contour_points (int, optional): Number of contour point used when calculating the centerness
+        """
     def __init__(self,
-                 contour_points,
                  use_max_only=True,
-                 return_max_centerness=True):
-        self.contour_points = contour_points
+                 return_centerness=True,
+                 contour_points=None
+                 ):
         self.use_max_only = use_max_only
-        self.return_max_centerness = return_max_centerness
+        self.return_centerness = return_centerness
+        self.contour_points = contour_points
 
     def __call__(self, results):
 
@@ -106,39 +114,42 @@ class PolarTarget(object):
 
         # Go through each mask instance in image and find it's center, countour and max centerness
         for mask in results['gt_masks']:
-            if self.return_max_centerness:
-                center, contour, max_centerness = self.get_single_centerpoint(mask)
+            if self.return_centerness:
+                center, contour, centerness = self.get_contour(mask)
             else:
-                center, contour = self.get_single_centerpoint(mask)
+                center, contour = self.get_contour(mask)
             contour = contour[0]
             y, x = center
             mask_centers.append([x, y])  # save mask centers of all objects
             mask_contours.append(torch.tensor(contour[:, 0, :]))  # save contour points of all objects
-            max_centernesses.append(max_centerness)
+            if self.return_centerness:
+                max_centernesses.append(centerness)
 
         results['gt_centers'] = mask_centers
         results['gt_masks'] = mask_contours
-        results['gt_max_centerness'] = max_centernesses
+        if self.return_centerness:
+            results['gt_max_centerness'] = max_centernesses
 
         return results
 
-    def get_single_centerpoint(self, mask):
+    def get_contour(self, mask):
         contour, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
         if self.use_max_only:
             contour.sort(key=lambda cx: cv2.contourArea(cx), reverse=True)  # only save the biggest one
-            '''debug IndexError: list index out of range'''
             count = contour[0][:, 0, :]
         else:
             count = np.concatenate(contour)[:, 0, :]
+
+        # Calculate the center point
         try:
             center = get_centerpoint(count)
         except:
             x, y = count.mean(axis=0)
             center = [int(x), int(y)]
 
-        if self.return_max_centerness:
+        if self.return_centerness:
             points, _ = get_polar_coordinates(center[0], center[1], count, self.contour_points)
-            max_centerness = polar_centerness_target(points)
-            return center, contour, max_centerness
+            centernes = polar_centerness_target(points)
+            return center, contour, centernes
         else:
             return center, contour
