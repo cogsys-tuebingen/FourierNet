@@ -36,12 +36,14 @@ pip install -v -e .
 
 
 
-## A quick Demo
-To run a demo please download one of the trained models weights [here](https://drive.google.com/open?id=1g08c4P5ZhNWwVMHY2ON2tBdc3KFGPhVB). In ```demo/visualize.py```, 
+## A quick demo
+To run a demo please download one of the trained models weights 
+[here](https://drive.google.com/open?id=1g08c4P5ZhNWwVMHY2ON2tBdc3KFGPhVB). In ```demo/inference_demo.py```, 
 set the variable ```model_weights```  to the path of the *.pth file you downloaded. 
-Set the ```config_file``` to the path of the appropriate config file. 
-Many config files are found in the configs directory. Set the ```images_path``` with the directory containing the images you want to test and run ```demo/visualize.py```. 
-In the config file you can change the variable ```visulize_coe``` to see the effect of changing the number of Fourier coefficents. Enjoy!  
+Set the ```config_file``` to the path of the appropriate config file from the configs directory. 
+Set the ```images_path``` with the directory containing the images you want to test and run ```demo/visualize.py```. 
+In the config file you can change the variable ```visulize_coe``` to see the effect of changing the number of Fourier 
+coefficents to represent the contour. Enjoy!  
 
 ## Results of available models
 
