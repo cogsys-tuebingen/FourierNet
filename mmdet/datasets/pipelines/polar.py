@@ -2,6 +2,7 @@ import cv2
 
 from ..registry import PIPELINES
 import numpy as np
+import torch
 
 
 def get_polar_coordinates(c_x, c_y, pos_mask_contour, n=72):
@@ -112,7 +113,7 @@ class PolarTarget(object):
             contour = contour[0]
             y, x = center
             mask_centers.append([x, y])  # save mask centers of all objects
-            mask_contours.append(contour)  # save contour points of all objects
+            mask_contours.append(torch.tensor(contour[:, 0, :]))  # save contour points of all objects
             max_centernesses.append(max_centerness)
 
         results['gt_centers'] = mask_centers
