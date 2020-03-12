@@ -1,6 +1,7 @@
 # model settings
 contour_points = 60
 strides = [8, 16, 32, 64, 128]
+normalized_centerness = False
 model = dict(
     type='FourierNet',
     pretrained='open-mmlab://resnet50_caffe',
@@ -43,7 +44,8 @@ model = dict(
         contour_points=contour_points,
         use_fourier=True,
         num_coe=36,
-        visulize_coe=36
+        visulize_coe=36,
+        normalized_centerness=normalized_centerness
     )
 )
 # training and testing settings
@@ -79,7 +81,9 @@ train_pipeline = [
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
-    dict(type='PolarTarget', contour_points=contour_points, use_max_only=True, return_max_centerness=True),
+    dict(type='PolarTarget', contour_points=contour_points,
+         use_max_only=True,
+         return_max_centerness=normalized_centerness),
     dict(type='ToTensor', keys=['gt_centers', 'gt_max_centerness']),
     dict(type='ToDataContainer', fields=(dict(key='gt_centers'),
                                          dict(key='gt_max_centerness'))),

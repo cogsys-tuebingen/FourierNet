@@ -49,24 +49,21 @@ def get_mask_sample_region(gt_bb, mask_center, strides, num_points_per, gt_xs, g
     return inside_gt_bbox_mask
 
 
-def get_36_coordinates(c_x, c_y, pos_mask_contour, N=72):
+def get_polar_coordinates(c_x, c_y, pos_mask_contour, n=72):
     if len(pos_mask_contour.shape) == 2:
         ct = pos_mask_contour
     else:
         ct = pos_mask_contour[:, 0, :]
     x = ct[:, 0] - c_x
     y = ct[:, 1] - c_y
-    # angle = np.arctan2(x, y)*180/np.pi
     angle = torch.atan2(x, y) * 180 / np.pi
     angle[angle < 0] += 360
     angle = angle.int()
-    # dist = np.sqrt(x ** 2 + y ** 2)
     dist = torch.sqrt(x ** 2 + y ** 2)
     angle, idx = torch.sort(angle)
     dist = dist[idx]
 
-    interval = 360 // N
-    # 生成36个角度
+    interval = 360 // n
     new_coordinate = {}
     for i in range(0, 360, interval):
         if i in angle:
@@ -91,23 +88,36 @@ def get_36_coordinates(c_x, c_y, pos_mask_contour, N=72):
             d = dist[angle == i - 3].max()
             new_coordinate[i] = d
 
-    distances = torch.zeros(N)
+    distances = torch.zeros(n)
 
     for a in range(0, 360, interval):
-        if not a in new_coordinate.keys():
+        if a in new_coordinate.keys():
+            distances[a // interval] = new_coordinate[a]
+        else:
             new_coordinate[a] = torch.tensor(1e-6)
             distances[a // interval] = 1e-6
-        else:
-            distances[a // interval] = new_coordinate[a]
-    # for idx in range(36):
-    #     dist = new_coordinate[idx * 10]
-    #     distances[idx] = dist
-    # print('%%%')
-    # print(dist.min(), dist.max())
-    # print(distances.min(), distances.max())
-    # print(pos_mask_contour.shape[0])
 
     return distances, new_coordinate
+
+
+def polar_centerness_target(pos_mask_targets, max_centerness=None):
+    # only calculate pos centerness targets, otherwise there may be nan
+    centerness_targets = torch.sqrt(pos_mask_targets.min() / pos_mask_targets.max())
+    if max_centerness:
+        centerness_targets /= max_centerness
+    return centerness_targets.clamp_max(1.0)
+
+
+def get_points_single(featmap_size, stride, dtype, device):
+    h, w = featmap_size
+    x_range = torch.arange(
+        0, w * stride, stride, dtype=dtype, device=device)
+    y_range = torch.arange(
+        0, h * stride, stride, dtype=dtype, device=device)
+    y, x = torch.meshgrid(y_range, x_range)
+    points = torch.stack(
+        (x.reshape(-1), y.reshape(-1)), dim=-1) + stride // 2
+    return points
 
 
 @HEADS.register_module
@@ -119,8 +129,7 @@ class FourierNetHead(nn.Module):
                  feat_channels=256,
                  stacked_convs=4,
                  strides=(4, 8, 16, 32, 64),
-                 regress_ranges=((-1, 64), (64, 128), (128, 256), (256, 512),
-                                 (512, INF)),
+                 regress_ranges=((-1, 64), (64, 128), (128, 256), (256, 512), (512, INF)),
                  use_dcn=False,
                  mask_nms=False,
                  bbox_from_mask=False,
@@ -138,7 +147,8 @@ class FourierNetHead(nn.Module):
                  use_fourier=False,
                  num_coe=36,
                  visulize_coe=36,
-                 centerness_factor=0.5):
+                 centerness_factor=0.5,
+                 normalized_centerness=False):
         super(FourierNetHead, self).__init__()
         self.use_fourier = use_fourier
         self.contour_points = contour_points
@@ -168,8 +178,8 @@ class FourierNetHead(nn.Module):
         self.center_sample = center_sample
         self.use_mask_center = use_mask_center
         self.radius = radius
-        self.angles = torch.range(0, 359, self.interval).cuda() / 180 * math.pi
         self.centerness_factor = centerness_factor
+        self.normalized_centerness = normalized_centerness
         self._init_layers()
 
     def _init_layers(self):
@@ -390,21 +400,20 @@ class FourierNetHead(nn.Module):
 
         flatten_cls_scores = torch.cat(flatten_cls_scores)  # [num_pixel, 80]
         flatten_bbox_preds = torch.cat(flatten_bbox_preds)  # [num_pixel, 4]
-        flatten_mask_preds = torch.cat(flatten_mask_preds)  # [num_pixel, 36]
+        flatten_mask_preds = torch.cat(flatten_mask_preds)  # [num_pixel, n]
         flatten_centerness = torch.cat(flatten_centerness)  # [num_pixel]
 
         flatten_labels = torch.cat(labels).long()  # [num_pixel]
         flatten_centerness_targets = torch.cat(centerness_targets)
         flatten_bbox_targets = torch.cat(bbox_targets)  # [num_pixel, 4]
-        flatten_mask_targets = torch.cat(mask_targets)  # [num_pixel, 36]
+        flatten_mask_targets = torch.cat(mask_targets)  # [num_pixel, n]
         flatten_points = torch.cat([points.repeat(num_imgs, 1)
                                     for points in all_level_points])  # [num_pixel,2]
         pos_inds = flatten_labels.nonzero().reshape(-1)
         num_pos = len(pos_inds)
 
-        loss_cls = self.loss_cls(
-            flatten_cls_scores, flatten_labels,
-            avg_factor=num_pos + num_imgs)  # avoid num_pos is 0
+        loss_cls = self.loss_cls(flatten_cls_scores, flatten_labels,
+                                 avg_factor=num_pos + num_imgs)  # avoid num_pos is 0
         pos_bbox_preds = flatten_bbox_preds[pos_inds]
         pos_centerness = flatten_centerness[pos_inds]
         pos_mask_preds = flatten_mask_preds[pos_inds]
@@ -435,9 +444,6 @@ class FourierNetHead(nn.Module):
                 loss_mask = self.loss_mask(pos_mask_preds,
                                            pos_mask_targets)
             else:
-                # loss_mask = self.loss_mask(pos_mask_preds,
-                #                            pos_mask_targets
-                #                            )
                 loss_mask = self.loss_mask(pos_mask_preds,
                                            pos_mask_targets,
                                            weight=pos_centerness_targets,
@@ -471,20 +477,9 @@ class FourierNetHead(nn.Module):
         mlvl_points = []
         for i in range(len(featmap_sizes)):
             mlvl_points.append(
-                self.get_points_single(featmap_sizes[i], self.strides[i],
-                                       dtype, device))
+                get_points_single(featmap_sizes[i], self.strides[i],
+                                  dtype, device))
         return mlvl_points
-
-    def get_points_single(self, featmap_size, stride, dtype, device):
-        h, w = featmap_size
-        x_range = torch.arange(
-            0, w * stride, stride, dtype=dtype, device=device)
-        y_range = torch.arange(
-            0, h * stride, stride, dtype=dtype, device=device)
-        y, x = torch.meshgrid(y_range, x_range)
-        points = torch.stack(
-            (x.reshape(-1), y.reshape(-1)), dim=-1) + stride // 2
-        return points
 
     def polar_target(self, points, labels_list, bbox_list, mask_list, centers_list, centerness_list):
         assert len(points) == len(self.regress_ranges)
@@ -543,44 +538,39 @@ class FourierNetHead(nn.Module):
 
         return concat_lvl_labels, concat_lvl_bbox_targets, concat_lvl_mask_targets, concat_lvl_centerness_targets
 
-    def polar_centerness_target(self, pos_mask_targets, max_centerness=None):
-        # only calculate pos centerness targets, otherwise there may be nan
-        centerness_targets = torch.sqrt(pos_mask_targets.min() / pos_mask_targets.max())
-        if max_centerness:
-            centerness_targets /= max_centerness
-        return centerness_targets.clamp_max(1.0)
-
     def polar_target_single(self, gt_bboxes, gt_masks, gt_labels, mask_centers, gt_max_centerness, points,
                             regress_ranges):
-        num_points = points.size(0)  # Sum of all points ever
-        num_gts = gt_labels.size(0)  # Number of ground truth objects
+
+        # Sum of all points ever
+        num_points = points.size(0)
+        # Number of ground truth objects
+        num_gts = gt_labels.size(0)
         if num_gts == 0:
             return gt_labels.new_zeros(num_points), \
                    gt_bboxes.new_zeros((num_points, 4))
 
-        areas = (gt_bboxes[:, 2] - gt_bboxes[:, 0] + 1) * (
-                gt_bboxes[:, 3] - gt_bboxes[:, 1] + 1)  # Area of all bounding boxes
-        # TODO: figure out why these two are different
-        # areas = areas[None].expand(num_points, num_gts)
+        # Area of all bounding boxes
+        areas = (gt_bboxes[:, 2] - gt_bboxes[:, 0] + 1) * \
+                (gt_bboxes[:, 3] - gt_bboxes[:, 1] + 1)
+
         areas = areas[None].repeat(num_points, 1)  # Make a copy for all points
-        regress_ranges = regress_ranges[:, None, :].expand(
-            num_points, num_gts,
-            2)  # Make a copy for each object (adds a dimension equal to num of ground truth bboxes)
+
+        # Make a copy for each object (adds a dimension equal to num of ground truth bboxes)
+        regress_ranges = regress_ranges[:, None, :].expand(num_points, num_gts, 2)
         gt_bboxes = gt_bboxes[None].expand(num_points, num_gts, 4)  # Make a copy for all points
-        # xs ys 分别是points的x y坐标
         xs, ys = points[:, 0], points[:, 1]
         xs = xs[:, None].expand(num_points, num_gts)  # Make a copy for each object
         ys = ys[:, None].expand(num_points, num_gts)  # Make a copy for each object
+
         # The pixel distance between all object bounding boxes and all points in feature map
         left = xs - gt_bboxes[..., 0]
         right = gt_bboxes[..., 2] - xs
         top = ys - gt_bboxes[..., 1]
         bottom = gt_bboxes[..., 3] - ys
-        bbox_targets = torch.stack((left, top, right, bottom),
-                                   -1)  # feature map上所有点对于gtbox的上下左右距离 [num_pix, num_gt, 4]
+        bbox_targets = torch.stack((left, top, right, bottom), -1)
 
-        # 把mask_centers assign到不同的层上,根据regress_range和重心的位置
-        mask_centers = mask_centers[None].expand(num_points, num_gts, 2)  # make centerness regression targets
+        # make centerness regression targets
+        mask_centers = mask_centers[None].expand(num_points, num_gts, 2)
         if self.center_sample:
             if self.use_mask_center:
                 inside_gt_bbox_mask = get_mask_sample_region(gt_bboxes,
@@ -601,32 +591,37 @@ class FourierNetHead(nn.Module):
             inside_gt_bbox_mask = bbox_targets.min(-1)[0] > 0
 
         # condition2: limit the regression range for each location
-        max_regress_distance = bbox_targets.max(-1)[0]  # returns the maximum vector in the bounbing box targets
+        # returns the maximum vector in the bounding box targets
+        max_regress_distance = bbox_targets.max(-1)[0]
 
-        inside_regress_range = (
-                                       max_regress_distance >= regress_ranges[..., 0]) & (
-                                       max_regress_distance <= regress_ranges[
-                                   ..., 1])  # check if it is in regress range
+        # check if it is in regress range
+        inside_regress_range = (max_regress_distance >= regress_ranges[..., 0]) & \
+                               (max_regress_distance <= regress_ranges[..., 1])
 
         areas[inside_gt_bbox_mask == 0] = INF
         areas[inside_regress_range == 0] = INF
         min_area, min_area_inds = areas.min(dim=1)
 
-        labels = gt_labels[min_area_inds]  # set the ground truth labels
-        labels[min_area == INF] = 0  # [num_gt] 介于0-80
+        # set the ground truth labels
+        labels = gt_labels[min_area_inds]
+        labels[min_area == INF] = 0
         bbox_targets = bbox_targets[range(num_points), min_area_inds]
-        pos_inds = labels.nonzero().reshape(-1)  # get the indexes of features which have objects
 
+        # get the indexes of features which have objects
+        pos_inds = labels.nonzero().reshape(-1)
         mask_targets = torch.zeros(num_points, self.contour_points, device=bbox_targets.device).float()
         centerness_target = torch.zeros(num_points, device=bbox_targets.device).float()
         pos_mask_ids = min_area_inds[pos_inds]
-        for p, id in zip(pos_inds, pos_mask_ids):
+
+        for p, i in zip(pos_inds, pos_mask_ids):
             x, y = points[p]
-            pos_mask_contour = gt_masks[id]
-            dists, _ = get_36_coordinates(x, y, pos_mask_contour, self.contour_points)
+            pos_mask_contour = gt_masks[i]
+            dists, _ = get_polar_coordinates(x, y, pos_mask_contour, self.contour_points)
             mask_targets[p] = dists
-            centerness_target[p] = self.polar_centerness_target(dists, gt_max_centerness[id])
-            # centerness_target[p] = self.polar_centerness_target(dists)
+            if self.normalized_centerness:
+                centerness_target[p] = polar_centerness_target(dists, gt_max_centerness[i])
+            else:
+                centerness_target[p] = polar_centerness_target(dists)
         return labels, bbox_targets, mask_targets, centerness_target
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds', 'centernesses'))
@@ -725,9 +720,10 @@ class FourierNetHead(nn.Module):
         if rescale:
             _mlvl_bboxes = mlvl_bboxes / mlvl_bboxes.new_tensor(scale_factor)
             try:
-                scale_factor = torch.Tensor(scale_factor)[:2].cuda().unsqueeze(1).repeat(1, self.contour_points)
+                # TODO:change cuda
+                scale_factor = torch.tensor(scale_factor)[:2].cuda().unsqueeze(1).repeat(1, self.contour_points)
                 _mlvl_masks = mlvl_masks / scale_factor
-            except:
+            except (RuntimeError, TypeError, NameError):
                 _mlvl_masks = mlvl_masks / mlvl_masks.new_tensor(scale_factor)
 
         mlvl_scores = torch.cat(mlvl_scores)
@@ -737,8 +733,10 @@ class FourierNetHead(nn.Module):
 
         if self.mask_nms:
             '''1 mask->min_bbox->nms, performance same to origin box'''
-            a = _mlvl_masks
-            _mlvl_bboxes = torch.stack([a[:, 0].min(1)[0], a[:, 1].min(1)[0], a[:, 0].max(1)[0], a[:, 1].max(1)[0]], -1)
+            _mlvl_bboxes = torch.stack([_mlvl_masks[:, 0].min(1)[0],
+                                        _mlvl_masks[:, 1].min(1)[0],
+                                        _mlvl_masks[:, 0].max(1)[0],
+                                        _mlvl_masks[:, 1].max(1)[0]], -1)
             det_bboxes, det_labels, det_masks = multiclass_nms_with_mask(
                 _mlvl_bboxes,
                 mlvl_scores,
@@ -768,29 +766,32 @@ class FourierNetHead(nn.Module):
             points (Tensor): Shape (n, 2), [x, y].
             distances (Tensor): Distances from the given point to edge of contour.
             max_shape (tuple): Shape of the image.
+            train (bool): set true in training mode
+            bbox (bool): clamp mask predictions which are outside the predicted bbox
 
         Returns:
             Tensor: Decoded masks.
         """
         if self.use_fourier:
             if train:
-                distances = torch.irfft(torch.cat([distances, torch.zeros(distances.shape[0],
-                                                                          self.contour_points - self.num_coe, 2).to(
-                    "cuda")], 1), 1, True, False).float().exp()
+                distances = torch.irfft(
+                    torch.cat([distances, torch.zeros(distances.shape[0], self.contour_points - self.num_coe, 2,
+                                                      device=points.device)], 1), 1, True, False).float().exp()
 
             else:
                 distances = distances.reshape(-1, self.num_coe, 2)
-                distances = torch.irfft(torch.cat([distances[..., :self.visulize_coe, :],
-                                                   torch.zeros(distances.shape[0],
-                                                               self.contour_points - self.visulize_coe,
-                                                               2).to("cuda")], 1), 1, True, False).float().exp()
+                distances = torch.irfft(
+                    torch.cat([distances[..., :self.visulize_coe, :],
+                               torch.zeros(distances.shape[0], self.contour_points - self.visulize_coe, 2,
+                                           device=points.device)], 1), 1, True, False).float().exp()
 
+        angles = torch.range(0, 359, self.interval, device=points.device) / 180 * math.pi
         num_points = points.shape[0]
-        points = points[:, :, None].repeat(1, 1, self.angles.shape[0])
+        points = points[:, :, None].repeat(1, 1, angles.shape[0])
         c_x, c_y = points[:, 0], points[:, 1]
 
-        sin = torch.sin(self.angles)
-        cos = torch.cos(self.angles)
+        sin = torch.sin(angles)
+        cos = torch.cos(angles)
         sin = sin[None, :].repeat(num_points, 1)
         cos = cos[None, :].repeat(num_points, 1)
 
