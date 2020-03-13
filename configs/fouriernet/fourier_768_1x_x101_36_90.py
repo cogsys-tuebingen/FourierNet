@@ -164,7 +164,7 @@ total_epochs = 12
 device_ids = range(8)
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dir/resnext101/pCent_IOU_36_90_NoDCN'
+work_dir = './work_dir/resnext101_36_90_NoDCN'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

@@ -37,7 +37,8 @@ This git repo contains the official code for **[FourierNet](https://arxiv.org/ab
 - CUDA 10.1
 - mmcv 0.2.14
 
-### Install requirements
+### Install steps
+For installation please check the mmdet installation guide, or try the commands below:
 
 
 ```shell
@@ -62,7 +63,7 @@ pip install -v -e .
 To run a demo please download one of the trained models weights 
 [here](https://drive.google.com/open?id=1g08c4P5ZhNWwVMHY2ON2tBdc3KFGPhVB). In ```demo/inference_demo.py```, 
 set the variable ```model_weights```  to the path of the *.pth file you downloaded. 
-Set the ```config_file``` to the path of the appropriate config file from the configs directory. 
+Set the ```config_file``` to the path of the appropriate config file in the configs directory. 
 Set the ```images_path``` with the directory containing the images you want to test and run ```demo/visualize.py```. 
 In the config file you can change the variable ```visulize_coe``` to see the effect of changing the number of Fourier 
 coefficents to represent the contour. Enjoy!  
@@ -74,9 +75,9 @@ Note: For fast code checking, check mmdet/ models/ anchor_heads/ fouriernet_head
 **Test:**
 
 To make tests, first download the [COCO2017 dataset](http://cocodataset.org/#download) and then 
-change the ```data_root``` variable in the config file to the path of dataset, then run the following command:
+change the ```data_root``` variable in the config file to the path of the dataset, then run the following command:
 
-```python /tools/test.py {path to config file} {path to weights} --out {path to save evaluation} --eval segm```
+```python tools/test.py {path to config file} {path to weights} --out {path to save evaluation} --eval segm```
 
 example
 
