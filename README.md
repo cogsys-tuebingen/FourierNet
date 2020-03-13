@@ -2,7 +2,30 @@
 
 This git repo contains the official code for **[FourierNet](https://arxiv.org/abs/2002.02709)**. 
 
-![image-20190807160835333](imgs/teddy.png)
+
+
+
+| | |
+|:-------------------------:|:-------------------------:|
+|![image1](demo/teddy2.png)  2 fourier coefficients |  ![image2](demo/teddy5.png) 5 fourier coefficients|
+|![image3](demo/teddy10.png)  10 fourier coefficients|  ![image4](demo/teddy20.png) 20 fourier coefficients|
+
+ FourierNet  is a  single  shot,  anchor-free,  fully convolutional instance segmentation method, 
+ which predicts a shape vector that is converted into contour points using a numerical transformation.
+ Compared to previous methods, we introduce a new training technique,  where we utilize a differentiable shape decoder, 
+ which achieves automatic weight balancing  of  the  shape  vector’s  coefficients.
+ Fourier  series was utilized as a shape encoder because of its coefficient interpretability and fast implementation. 
+ By using its lower frequencies we were able to retrieve smooth and compact masks.
+
+## Performance
+| | | | |
+|:-------------------------:|:-------------------------:|:-------------------------:|:-------------------------:|
+|![image1](demo/sample1.jpg) |  ![image1](demo/sample5.png)|![image1](demo/eagle2.png)|![image1](demo/sample2.jpg)|
+|![image1](demo/sample6.png) |  ![image1](demo/messi.jpg)|![image1](demo/sample4.jpg)|![image1](demo/sample7.png)|
+|![image1](demo/street.jpg) |  ![image1](demo/ese.png)|![image1](demo/sample8.png)|![image1](demo/teddygroup.jpg)|
+
+
+![image1](demo/number_of_parameters.png)
 
 ## Installation
 
@@ -44,7 +67,7 @@ Set the ```images_path``` with the directory containing the images you want to t
 In the config file you can change the variable ```visulize_coe``` to see the effect of changing the number of Fourier 
 coefficents to represent the contour. Enjoy!  
 
-## Results of available models
+Note: For fast code checking, check mmdet/ models/ anchor_heads/ fouriernet_head.py which contains most of our work.
 
 
 ## Testing and Training 
@@ -69,14 +92,15 @@ and then depending on the number of GPUs available run one of the following comm
 ##### 2. 4gpu train
 ```sh ./tools/dist_train.sh  {path to config file} 4 --launcher pytorch --work_dir {path to working dir}```
 
-## Important files
 
 
 ## Contributing to the project
 Any pull requests or issues are welcome.
 
 ## Credits
-The implementation of this code is based
+The authours want to thank [3Blue1Brown](https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw) for his amazing video on [Fourier Series](https://www.youtube.com/watch?v=r6sGWTCMz2k&list=PLZHQObOWTQDNPOjrT6KVlfJuKtYTftqH6&index=4), 
+which inspired them to do this work. In addition, the implementation of this code is based is based on [PolarMask](https://github.com/xieenze/PolarMask) implementation, 
+which uses the [mmdetection](https://github.com/open-mmlab/mmdetection) framework.
 
 ## Citations
 Please consider citing our paper in your publications if the project helps your research. BibTeX reference is as follows.
