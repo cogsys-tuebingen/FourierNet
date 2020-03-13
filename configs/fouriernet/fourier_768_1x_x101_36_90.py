@@ -1,17 +1,20 @@
 # model settings
-contour_points = 60
+contour_points = 90
 strides = [8, 16, 32, 64, 128]
+normalized_centerness = False
 model = dict(
     type='FourierNet',
-    pretrained='open-mmlab://resnet50_caffe',
+    pretrained='open-mmlab://resnext101_64x4d',  # changed
     backbone=dict(
-        type='ResNet',
-        depth=50,
+        type='ResNeXt',  # changed
+        depth=101,  # changed
+        groups=64,  # new
+        base_width=4,  # new
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
         norm_cfg=dict(type='BN', requires_grad=False),
-        style='caffe'),
+        style='pytorch'),
     neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -27,7 +30,7 @@ model = dict(
         in_channels=256,
         stacked_convs=4,
         feat_channels=256,
-        strides=strides,
+        strides=[8, 16, 32, 64, 128],
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
@@ -38,13 +41,13 @@ model = dict(
         loss_centerness=dict(
             type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
         loss_on_coe=False,
-        loss_mask=dict(type='PolarIOULoss'),
+        loss_mask=dict(type='MaskIOULoss'),
         norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
         contour_points=contour_points,
         use_fourier=True,
         num_coe=36,
         visulize_coe=36,
-        normalized_centerness=False
+        use_dcn=False,
     )
 )
 # training and testing settings
@@ -110,8 +113,8 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    imgs_per_gpu=4,
-    workers_per_gpu=4,
+    imgs_per_gpu=2,
+    workers_per_gpu=5,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_train2017.json',
@@ -121,11 +124,13 @@ data = dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_val2017.json',
         img_prefix=data_root + 'images/',
+        img_scale=(1280, 768),
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_val2017.json',
         img_prefix=data_root + 'images/',
+        img_scale=(1280, 768),
         pipeline=test_pipeline))
 # optimizer
 lr_ratio = 1
@@ -156,10 +161,10 @@ log_config = dict(
 # runtime settings
 
 total_epochs = 12
-device_ids = range(4)
+device_ids = range(8)
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/36_60'
+work_dir = './work_dir/resnext101/pCent_IOU_36_90_NoDCN'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

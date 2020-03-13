@@ -16,7 +16,6 @@ This git repo contains the official code for **[FourierNet](https://arxiv.org/ab
 
 ### Install requirements
 
-a. Create a conda virtual environment and activate it. Then install Cython.
 
 ```shell
 conda create -n fouriernet python=3.7

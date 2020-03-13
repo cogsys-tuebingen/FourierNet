@@ -3,6 +3,7 @@ import cv2
 from ..registry import PIPELINES
 import numpy as np
 import torch
+from mmdet.utils import print_log
 
 
 def get_polar_coordinates(c_x, c_y, pos_mask_contour, n=72):
@@ -114,10 +115,13 @@ class ConvertToContour(object):
 
         # Go through each mask instance in image and find it's center, countour and max centerness
         for mask in results['gt_masks']:
-            if self.return_centerness:
-                center, contour, centerness = self.get_contour(mask)
+            contour_results = self.get_contour(mask)
+            if contour_results is None:
+                return None
+            elif self.return_centerness:
+                center, contour, centerness = contour_results
             else:
-                center, contour = self.get_contour(mask)
+                center, contour = contour_results
             contour = contour[0]
             y, x = center
             mask_centers.append([x, y])  # save mask centers of all objects
@@ -135,15 +139,21 @@ class ConvertToContour(object):
     def get_contour(self, mask):
         contour, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
         if self.use_max_only:
-            contour.sort(key=lambda cx: cv2.contourArea(cx), reverse=True)  # only save the biggest one
-            count = contour[0][:, 0, :]
+
+            contour.sort(key=lambda cx: cv2.contourArea(cx), reverse=True)
+            try:
+                # only save the contour with the largest area
+                count = contour[0][:, 0, :]
+            except IndexError:
+                # This Happens when a mask is empty
+                return None
         else:
             count = np.concatenate(contour)[:, 0, :]
 
         # Calculate the center point
         try:
             center = get_centerpoint(count)
-        except:
+        except ZeroDivisionError:
             x, y = count.mean(axis=0)
             center = [int(x), int(y)]
 
