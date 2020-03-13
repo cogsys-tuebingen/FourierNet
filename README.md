@@ -98,7 +98,7 @@ and then depending on the number of GPUs available run one of the following comm
 Any pull requests or issues are welcome.
 
 ## Credits
-The authours want to thank [3Blue1Brown](https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw) for his amazing video on [Fourier Series](https://www.youtube.com/watch?v=r6sGWTCMz2k&list=PLZHQObOWTQDNPOjrT6KVlfJuKtYTftqH6&index=4), 
+The authors want to thank [3Blue1Brown](https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw) for his amazing video on [Fourier Series](https://www.youtube.com/watch?v=r6sGWTCMz2k&list=PLZHQObOWTQDNPOjrT6KVlfJuKtYTftqH6&index=4), 
 which inspired them to do this work. In addition, the implementation of this code is based is based on [PolarMask](https://github.com/xieenze/PolarMask) implementation, 
 which uses the [mmdetection](https://github.com/open-mmlab/mmdetection) framework.
 
