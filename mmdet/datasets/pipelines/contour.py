@@ -98,6 +98,7 @@ class ConvertToContour(object):
             return_centerness (bool): if true, the centerness of the contour center point is returned
             contour_points (int, optional): Number of contour point used when calculating the centerness
         """
+
     def __init__(self,
                  use_max_only=True,
                  return_centerness=True,
@@ -153,7 +154,7 @@ class ConvertToContour(object):
         # Calculate the center point
         try:
             center = get_centerpoint(count)
-        except ZeroDivisionError:
+        except (ArithmeticError, ValueError):
             x, y = count.mean(axis=0)
             center = [int(x), int(y)]
 
