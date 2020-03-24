@@ -723,7 +723,7 @@ class FourierNetHead(nn.Module):
                 # TODO:change cuda
                 scale_factor = torch.tensor(scale_factor)[:2].cuda().unsqueeze(1).repeat(1, self.contour_points)
                 _mlvl_masks = mlvl_masks / scale_factor
-            except (RuntimeError, TypeError, NameError):
+            except (RuntimeError, TypeError, NameError, IndexError):
                 _mlvl_masks = mlvl_masks / mlvl_masks.new_tensor(scale_factor)
 
         mlvl_scores = torch.cat(mlvl_scores)
