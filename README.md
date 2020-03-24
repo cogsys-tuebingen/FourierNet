@@ -50,7 +50,7 @@ pip install cython ipython setuptools
 pip install terminaltables matplotlib opencv-python pyyaml
 
 pip install pycocotools six idna imagecorruptions polygon3 tqdm future tensorboard
-git clone https://github.com/Nuri-benbarka/mmdetection.git
+git clone https://github.com/cogsys-tuebingen/FourierNet.git
 
 cd mmdetection
 pip install -r requirements.txt
