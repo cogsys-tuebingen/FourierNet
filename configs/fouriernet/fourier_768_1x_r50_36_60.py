@@ -74,7 +74,7 @@ train_pipeline = [
     dict(type='LoadAnnotations', with_bbox=True, with_mask=True),
     dict(
         type='Resize',
-        img_scale=[(1333//2, 640//2), (1333//2, 800//2)],
+        img_scale=[(1333, 640), (1333, 800)],
         multiscale_mode='value',
         keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
